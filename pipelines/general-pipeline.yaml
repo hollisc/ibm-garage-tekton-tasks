@@ -1,9 +1,8 @@
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: ibm-golang-edge
+  name: ibm-general
   annotations:
-    app.openshift.io/runtime: golang
 spec:
   params:
     - name: git-url
@@ -17,6 +16,9 @@ spec:
     - name: lint-dockerfile
       description: Enable the pipeline to lint the Dockerfile for best practices
       default: "true"
+    - name: health-endpoint
+      description: Endpoint to check health after deployment, defaults /
+      default: "/"
   tasks:
     - name: setup
       taskRef:
@@ -28,11 +30,13 @@ spec:
           value: $(params.git-revision)
         - name: scan-image
           value: $(params.scan-image)
+        - name: health-endpoint
+          value: $(params.health-endpoint)
         - name: lint-dockerfile
           value: $(params.lint-dockerfile)
-    - name: test
+    - name: code-lint
       taskRef:
-        name: ibm-golang-test
+        name: ibm-sonar-test
       runAfter:
         - setup
       params:
@@ -43,12 +47,12 @@ spec:
         - name: source-dir
           value: "$(tasks.setup.results.source-dir)"
         - name: app-name
-          value: "$(tasks.setup.results.app-name)"
+          value: $(tasks.setup.results.app-name)
     - name: dockerfile-lint
       taskRef:
         name: ibm-dockerfile-lint
       runAfter:
-        - test
+        - code-lint
       params:
         - name: git-url
           value: "$(tasks.setup.results.git-url)"
@@ -184,9 +188,9 @@ spec:
           value: "$(tasks.setup.results.deploy-ingress-type)"
         - name: tools-image
           value: "$(tasks.setup.results.tools-image)"
-    - name: edge-cd
+    - name: gitops
       taskRef:
-        name: ibm-gitops-edge
+        name: ibm-gitops
       runAfter:
         - helm-release
       params:
@@ -194,5 +198,7 @@ spec:
           value: "$(tasks.setup.results.app-name)"
         - name: version
           value: "$(tasks.tag-release.results.tag)"
+        - name: helm-url
+          value: $(tasks.helm-release.results.helm-url)
         - name: tools-image
           value: "$(tasks.setup.results.tools-image)"
